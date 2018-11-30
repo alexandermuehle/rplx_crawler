@@ -121,21 +121,17 @@ class PingServer(object):
 							request_neighbour()
 						if data[97] == 4:
 							#get up to 16 neighbours and add them to the q (12 neighbours per packet)
-							while True:
-								nodes = rlp.decode(data[98:])[0] #[0] nodes [1] expiration
-								for node in nodes:
-									ip = ip_address(node[0])
-									if len(node[1]) == 2:	
-										udp_port = struct.unpack(">H", node[1])
-									if len(node[2]) == 2:
-										tcp_port = struct.unpack(">H", node[2])
-									node_id = node[3]
-									logging.info("Neighbour: " + str(ip) + ", " + str(udp_port[0]) + ", " + str(tcp_port[0]))
-									q.put(Endpoint(str(ip), udp_port[0], tcp_port[0]))
-									counter += 1
-								if counter == 16:
-									break
-								data, addr = sock.recvfrom(1280)
+							nodes = rlp.decode(data[98:])[0] #[0] nodes [1] expiration
+							for node in nodes:
+								ip = ip_address(node[0])
+								if len(node[1]) == 2:	
+									udp_port = struct.unpack(">H", node[1])
+								if len(node[2]) == 2:
+									tcp_port = struct.unpack(">H", node[2])
+								node_id = node[3]
+								logging.info("Neighbour: " + str(ip) + ", " + str(udp_port[0]) + ", " + str(tcp_port[0]))
+								q.put(Endpoint(str(ip), udp_port[0], tcp_port[0]))
+								counter += 1
 					#timeout because we received all neighbours available (less than 16)
 					except socket.timeout:
 						logging.info("received neighbours from " + addr[0])	
