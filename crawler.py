@@ -12,10 +12,11 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 class Endpoint(object):
-	def __init__(self, address, udpPort, tcpPort):
+	def __init__(self, address, udpPort, tcpPort, nodeID):
 		self.address = ip_address(address)
 		self.udpPort = udpPort
 		self.tcpPort = tcpPort
+		self.nodeID = nodeID
 
 	def pack(self):
 		return [self.address.packed,
@@ -91,8 +92,16 @@ class PingServer(object):
 
 		def conversation():
 
-			def request_neighbour():
-				find_neighbour = NeighbourNode(self.priv_key.pubkey.serialize(compressed=False))
+			def request_neighbour(bucket):
+				#generate nodeID to discover specified bucket
+				generatedID = self.their_endpoint.nodeID[:bucket]
+				for x in range(len(self.their_endpoint.nodeID)-bucket):
+					notByte = b'\x00'
+					if(notByte is self.their_endpoint.nodeID[x+bucket]):
+						notByte = b'\x01'
+					generatedID += notByte
+				#send request
+				find_neighbour = NeighbourNode(generatedID)
 				message = self.wrap_packet(find_neighbour)
 				logging.info("sending find_node")
 				sock.sendto(message, (their_endpoint.address.exploded, their_endpoint.udpPort))	
@@ -105,39 +114,41 @@ class PingServer(object):
 				sock.sendto(message, (their_endpoint.address.exploded, their_endpoint.udpPort))
 				#count how many nodes have been received
 				counter = 0
-				while counter < 16:
-					try:
-						data, addr = sock.recvfrom(1280)
-						if data[97] == 1:	
-							logging.info("received ping from " + addr[0])	
-							pinger = Endpoint(addr[0], addr[1], addr[1])
-							pong = PongNode(pinger, data[:32])
-							message = self.wrap_packet(pong)
-							logging.info("sending pong to " + str(pinger.address))
-							sock.sendto(message, (pinger.address.exploded, pinger.udpPort))	
-							request_neighbour()
-						if data[97] == 2:
-							logging.info("received pong from " + addr[0])
-							request_neighbour()
-						if data[97] == 4:
-							#get up to 16 neighbours and add them to the q (12 neighbours per packet)
-							nodes = rlp.decode(data[98:])[0] #[0] nodes [1] expiration
-							for node in nodes:
-								ip = ip_address(node[0])
-								if len(node[1]) == 2:	
-									udp_port = struct.unpack(">H", node[1])
-								if len(node[2]) == 2:
-									tcp_port = struct.unpack(">H", node[2])
-								node_id = node[3]
-								logging.info("Neighbour: " + str(ip) + ", " + str(udp_port[0]) + ", " + str(tcp_port[0]))
-								q.put(Endpoint(str(ip), udp_port[0], tcp_port[0]))
-								counter += 1
-					#timeout because we received all neighbours available (less than 16)
-					except socket.timeout:
-						logging.info("received neighbours from " + addr[0])	
-						break
-				logging.info("received neighbours from " + addr[0])	
-
+				#discover all buckets of a neigbour
+				for bucket in range(255):
+					#discover a bucket 
+					while counter < 16:
+						try:
+							data, addr = sock.recvfrom(1280)
+							if data[97] == 1:	
+								logging.info("received ping from " + addr[0])	
+								pinger = Endpoint(addr[0], addr[1], addr[1], b'')
+								pong = PongNode(pinger, data[:32])
+								message = self.wrap_packet(pong)
+								logging.info("sending pong to " + str(pinger.address))
+								sock.sendto(message, (pinger.address.exploded, pinger.udpPort))	
+								request_neighbour(bucket)
+							if data[97] == 2:
+								logging.info("received pong from " + addr[0])
+								request_neighbour(bucket)
+							if data[97] == 4:
+								#get up to 16 neighbours and add them to the q (12 neighbours per packet)
+								nodes = rlp.decode(data[98:])[0] #[0] nodes [1] expiration
+								for node in nodes:
+									ip = ip_address(node[0])
+									if len(node[1]) == 2:	
+										udp_port = struct.unpack(">H", node[1])
+									if len(node[2]) == 2:
+										tcp_port = struct.unpack(">H", node[2])
+									nodeID = node[3]
+									logging.info("Neighbour: " + str(ip) + ", " + str(udp_port[0]) + ", " + str(tcp_port[0]))
+									q.put(Endpoint(str(ip), udp_port[0], tcp_port[0], nodeID))
+									counter += 1
+						#timeout because we received all neighbours available (less than 16)
+						except socket.timeout:
+							logging.info("received neighbours from " + addr[0])	
+							break
+					logging.info("received neighbours from " + addr[0])	
 
 		return threading.Thread(target = conversation)
 
