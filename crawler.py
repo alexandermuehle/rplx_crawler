@@ -136,7 +136,7 @@ class PingServer(object):
 					except socket.timeout:
 						logging.info("received neighbours from " + addr[0])	
 						break
-					logging.info("received neighbours from " + addr[0])	
+				logging.info("received neighbours from " + addr[0])	
 
 
 		return threading.Thread(target = conversation)
