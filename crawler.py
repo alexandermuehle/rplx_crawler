@@ -6,7 +6,9 @@ import socket
 import threading
 import hashlib
 import sha3
-from secp256k1 import PrivateKey
+import random
+from bitstring import BitArray
+from secp256k1 import PrivateKey, PublicKey
 from ipaddress import ip_address
 
 logger = logging.getLogger(__name__)
@@ -101,18 +103,32 @@ class PingServer(object):
 
 			def request_neighbour(bucket):
 				#generate nodeID to discover specified bucket
-				generatedID = self.their_endpoint.nodeID[:bucket]
-				for x in range(len(self.their_endpoint.nodeID)-bucket):
-					notByte = b'\x00'
-					if(notByte is self.their_endpoint.nodeID[x+bucket]):
-						notByte = b'\x01'
-					generatedID += notByte
+				hashedID = keccak256(self.their_endpoint.nodeID)
+				match = False
+				mask = 255
+
+				while match is False:
+					generatedID = bytes(random.randint(0,255) for _ in range(64))
+					genHashed = keccak256(generatedID)
+					for x in range(int(bucket/8)+1): #get the bytes in which the relevant bits are and iterate over them
+						#make mask according to position in byte array (if last relevant byte get specific bit mask)
+						if x == int(bucket/8):
+							mask = pow(2, bucket%8)-1
+						else:
+							mask = 255
+						#actual comparing
+						if genHashed[x] & hashedID[x] & mask == mask:
+							match = True
+						else:
+							match = False
+							break
+
 				logging.info(generatedID)
 				#send request
 				find_neighbour = NeighbourNode(generatedID)
 				message = self.wrap_packet(find_neighbour)
 				logging.info("sending find_node")
-				sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))	
+				#sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))	
 
 			while True:
 				ping = PingNode(self.endpoint, self.their_endpoint)
@@ -121,8 +137,9 @@ class PingServer(object):
 				sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))
 				#count how many nodes have been received
 				counter = 0
-				#discover all buckets of a neigbour
-				for bucket in range(255):
+				#discover top 13 buckets of a neigbour (finding collisions for all would be hard)
+				#propability that a node will map to 13th bucket = 1/16384
+				for bucket in range(13):
 					#discover a bucket 
 					while counter < 16:
 						try:
@@ -134,10 +151,10 @@ class PingServer(object):
 								message = self.wrap_packet(pong)
 								logging.info("sending pong to " + str(pinger.address))
 								sock.sendto(message, (pinger.address.exploded, pinger.udpPort))	
-								#request_neighbour(bucket)
+
 							if data[97] == 2:
 								logging.info("received pong from " + addr[0])
-								#request_neighbour(bucket)
+
 							if data[97] == 4:
 								#get up to 16 neighbours and add them to the q (12 neighbours per packet)
 								nodes = rlp.decode(data[98:])[0] #[0] nodes [1] expiration
@@ -155,7 +172,7 @@ class PingServer(object):
 						#timeout because we received all neighbours available (less than 16)
 						except socket.timeout:
 							break
-					request_neighbour(bucket)
+					request_neighbour(bucket+1)
 					time.sleep(0.1) #rate limit so we still get answers 
 				self.their_endpoint = q.get()
 

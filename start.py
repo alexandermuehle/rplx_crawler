@@ -20,5 +20,5 @@ q.put(Endpoint(u'199.247.23.117', 30303, 30303, bytes.fromhex("a979fb575495b8d6d
 #start threads for discovery
 server = PingServer(Endpoint(u'127.0.0.1', 30303, 30303, k.serialize()))
 for x in range(threadcount):
-	discover_thread = server.discover(q, o, x).start()
+	discover_thread = server.discover(q, x).start()
 
