@@ -4,12 +4,18 @@ import struct
 import rlp
 import socket
 import threading
-from crypto import keccak256
+import hashlib
+import sha3
 from secp256k1 import PrivateKey
 from ipaddress import ip_address
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+def keccak256(s):
+	k = sha3.keccak_256()
+	k.update(s)
+	return k.digest()
 
 class Endpoint(object):
 	def __init__(self, address, udpPort, tcpPort, nodeID):
@@ -58,7 +64,7 @@ class NeighbourNode(object):
 		self.pubkey = pubkey
 
 	def pack(self):
-		return [self.pubkey[:-1],
+		return [self.pubkey,
 			struct.pack(">I", int(time.time() + 60))]
 
 
@@ -89,6 +95,7 @@ class PingServer(object):
 		sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		sock.bind(('0.0.0.0', self.endpoint.udpPort+count))
 		sock.settimeout(2)
+		self.their_endpoint = q.get()
 
 		def conversation():
 
@@ -100,18 +107,18 @@ class PingServer(object):
 					if(notByte is self.their_endpoint.nodeID[x+bucket]):
 						notByte = b'\x01'
 					generatedID += notByte
+				logging.info(generatedID)
 				#send request
 				find_neighbour = NeighbourNode(generatedID)
 				message = self.wrap_packet(find_neighbour)
 				logging.info("sending find_node")
-				sock.sendto(message, (their_endpoint.address.exploded, their_endpoint.udpPort))	
+				sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))	
 
 			while True:
-				their_endpoint = q.get()
-				ping = PingNode(self.endpoint, their_endpoint)
+				ping = PingNode(self.endpoint, self.their_endpoint)
 				message = self.wrap_packet(ping)
 				logging.info("sending ping")
-				sock.sendto(message, (their_endpoint.address.exploded, their_endpoint.udpPort))
+				sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))
 				#count how many nodes have been received
 				counter = 0
 				#discover all buckets of a neigbour
@@ -127,10 +134,10 @@ class PingServer(object):
 								message = self.wrap_packet(pong)
 								logging.info("sending pong to " + str(pinger.address))
 								sock.sendto(message, (pinger.address.exploded, pinger.udpPort))	
-								request_neighbour(bucket)
+								#request_neighbour(bucket)
 							if data[97] == 2:
 								logging.info("received pong from " + addr[0])
-								request_neighbour(bucket)
+								#request_neighbour(bucket)
 							if data[97] == 4:
 								#get up to 16 neighbours and add them to the q (12 neighbours per packet)
 								nodes = rlp.decode(data[98:])[0] #[0] nodes [1] expiration
@@ -144,11 +151,13 @@ class PingServer(object):
 									logging.info("Neighbour: " + str(ip) + ", " + str(udp_port[0]) + ", " + str(tcp_port[0]))
 									q.put(Endpoint(str(ip), udp_port[0], tcp_port[0], nodeID))
 									counter += 1
+								logging.info("received neighbours from " + addr[0])	
 						#timeout because we received all neighbours available (less than 16)
 						except socket.timeout:
-							logging.info("received neighbours from " + addr[0])	
 							break
-					logging.info("received neighbours from " + addr[0])	
+					request_neighbour(bucket)
+					time.sleep(0.1) #rate limit so we still get answers 
+				self.their_endpoint = q.get()
 
 		return threading.Thread(target = conversation)
 
