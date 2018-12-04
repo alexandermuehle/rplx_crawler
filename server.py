@@ -151,12 +151,13 @@ class PingServer(object):
 				logging.info("sending ping")
 				sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))
 				#count how many nodes have been received
-				counter = 0
 				#discover top 13 buckets of a neigbour (finding collisions for all would be hard)
 				#propability that a node will map to 13th bucket = 1/16384
 				for bucket in range(13):
 					#discover a bucket 
-					while counter < 16:
+					counter = 0
+					workers = []
+					while counter < 2:
 						try:
 							data, addr = sock.recvfrom(1280)
 							if data[97] == 1:	
@@ -172,14 +173,16 @@ class PingServer(object):
 
 							if data[97] == 4:
 								#get up to 16 neighbours and add them to the q (12 neighbours per packet)
-								worker = Thread(target = decode_worker, args = (q, data))
-								worker.start()
+								workers.append(Thread(target = decode_worker, args = (q, data)))
+								workers[counter].start()
 								logging.info("received neighbours from " + addr[0])
+								counter += 1
 						#timeout because we received all neighbours available (less than 16)
 						except socket.timeout:
 							break
+					for worker in workers:
+						worker.join()
 					request_neighbour(bucket+1)
-					time.sleep(0.1) #rate limit so we still get answers 
 				self.their_endpoint = q.get()
 
 		return threading.Thread(target = conversation)
