@@ -180,8 +180,6 @@ class PingServer(object):
 						#timeout because we received all neighbours available (less than 16)
 						except socket.timeout:
 							break
-					for worker in workers:
-						worker.join()
 					request_neighbour(bucket+1)
 				self.their_endpoint = q.get()
 

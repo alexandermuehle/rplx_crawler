@@ -19,10 +19,7 @@ q.put(Endpoint(u'199.247.23.117', 30303, 30303, bytes.fromhex("a979fb575495b8d6d
 
 #start threads for discovery
 server = PingServer(Endpoint(u'127.0.0.1', 30303, 30303, k.serialize()))
-workers = []
 for x in range(threadcount):
-	workers.append(server.discover(q, x).start())
+	server.discover(q, x).start()
 
-for worker in workers:
-	worker.join()
 
