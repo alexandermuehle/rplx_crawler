@@ -7,6 +7,7 @@ import threading
 import hashlib
 import sha3
 import random
+import queue
 from threading import Thread
 from bitstring import BitArray
 from secp256k1 import PrivateKey, PublicKey
@@ -31,6 +32,9 @@ class Endpoint(object):
 		return [self.address.packed,
 			struct.pack(">H", self.udpPort),
 			struct.pack(">H", self.tcpPort)]
+
+	def serialize(self):
+		return self.nodeID.hex() + ", " + str(self.address.exploded) + ", " + str(self.udpPort) + ", " + str(self.tcpPort)
 
 #ping message
 class PingNode(object):
@@ -94,7 +98,7 @@ class PingServer(object):
 		#hash + signature + packet_type + packet_data
 		return payload_hash + payload
 	
-	def discover(self, q, count):
+	def discover(self, q, out, count):
 		sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		sock.bind(('0.0.0.0', self.endpoint.udpPort+count))
 		sock.settimeout(2)
@@ -125,15 +129,15 @@ class PingServer(object):
 							match = False
 							break
 
-				logging.info(generatedID)
+				#logging.info(generatedID)
 				#send request
 				find_neighbour = NeighbourNode(generatedID)
 				message = self.wrap_packet(find_neighbour)
-				logging.info("sending find_node")
+				logging.debug("sending find_node")
 				sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))
 
 
-			def decode_worker(q, data):
+			def decode_worker(q, data, workerOut):
 				nodes = rlp.decode(data[98:])[0] #[0] nodes [1] expiration
 				for node in nodes:
 					ip = ip_address(node[0])
@@ -141,26 +145,32 @@ class PingServer(object):
 						udp_port = struct.unpack(">H", node[1])
 					if len(node[2]) == 2:
 						tcp_port = struct.unpack(">H", node[2])
+					else:
+						tcp_port = (">I", 0)
 					nodeID = node[3]
-					logging.info("Neighbour: " + str(ip) + ", " + str(udp_port[0]) + ", " + str(tcp_port[0]))
-					q.put(Endpoint(str(ip), udp_port[0], tcp_port[0], nodeID))
+					neighbour = Endpoint(str(ip), udp_port[0], tcp_port[0], nodeID)
+					logging.debug("Neighbour: " + neighbour.serialize())
+					q.put(neighbour)
+					workerOut.put(neighbour)
 
 			while True:
 				ping = PingNode(self.endpoint, self.their_endpoint)
 				message = self.wrap_packet(ping)
 				logging.info("sending ping")
 				sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))
+				serializeOut = self.their_endpoint.serialize()
 				#count how many nodes have been received
 				#discover top 13 buckets of a neigbour (finding collisions for all would be hard)
 				#propability that a node will map to 13th bucket = 1/16384
 				for bucket in range(13):
-					#discover a bucket 
+					#discover a bucket
 					counter = 0
+					workerOut = queue.Queue()
 					workers = []
 					while counter < 2:
 						try:
 							data, addr = sock.recvfrom(1280)
-							if data[97] == 1:	
+							if data[97] == 1:
 								logging.info("received ping from " + addr[0])	
 								pinger = Endpoint(addr[0], addr[1], addr[1], b'')
 								pong = PongNode(pinger, data[:32])
@@ -169,18 +179,28 @@ class PingServer(object):
 								sock.sendto(message, (pinger.address.exploded, pinger.udpPort))	
 
 							if data[97] == 2:
-								logging.info("received pong from " + addr[0])
+								logging.debug("received pong from " + addr[0])
 
 							if data[97] == 4:
 								#get up to 16 neighbours and add them to the q (12 neighbours per packet)
-								workers.append(Thread(target = decode_worker, args = (q, data)))
+								workers.append(Thread(target = decode_worker, args = (q, data, workerOut)))
 								workers[counter].start()
-								logging.info("received neighbours from " + addr[0])
+								logging.debug("received neighbours from " + addr[0])
 								counter += 1
 						#timeout because we received all neighbours available (less than 16)
 						except socket.timeout:
 							break
+					for worker in workers:
+						worker.join()
+					serializeOut += ", ["
+					for item in list(workerOut.queue):
+						serializeOut += "[" + item.serialize() + "], "
+					if serializeOut[-2] == ',':
+						serializeOut = serializeOut[:-2]
+					serializeOut += "]"
 					request_neighbour(bucket+1)
+				logging.info(serializeOut)
+				out.put(serializeOut)
 				self.their_endpoint = q.get()
 
 		return threading.Thread(target = conversation)
