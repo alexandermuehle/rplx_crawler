@@ -2,4 +2,4 @@
 crawls all participants of the rplx p2p network
 
 # Start
-python3 start.py [thread_count]
+python3 rplx_crawler.py [thread_count]
