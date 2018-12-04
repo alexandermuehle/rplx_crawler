@@ -192,12 +192,12 @@ class PingServer(object):
 							break
 					for worker in workers:
 						worker.join()
-					serializeOut += ", ["
+					serializeOut += ", \"["
 					for item in list(workerOut.queue):
 						serializeOut += "[" + item.serialize() + "], "
 					if serializeOut[-2] == ',':
 						serializeOut = serializeOut[:-2]
-					serializeOut += "]"
+					serializeOut += "]\""
 					request_neighbour(bucket+1)
 				logging.info(serializeOut)
 				out.put(serializeOut)

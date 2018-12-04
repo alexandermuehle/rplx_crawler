@@ -15,7 +15,7 @@ with open("priv_key", 'w') as f:
 
 #init queue and fill it with bootstraps
 q = queue.Queue()
-q.put(Endpoint(u'191.235.84.50', 30303, 30303, bytes.fromhex("a979fb575495b8d6db44f750317d0f4622bf4c2aa3365d6af7c284339968eef29b69ad0dce72a4d8db5ebb4968de0e3bec910127f134779fbcb0cb6d3331163c")))
+q.put(Endpoint(u'210.183.44.34', 30303, 30303, bytes.fromhex("288b97262895b1c7ec61cf314c2e2004407d0a5dc77566877aad1f2a36659c8b698f4b56fd06c4a0c0bf007b4cfb3e7122d907da3b005fa90e724441902eb19e")))
 
 out = queue.Queue()
 
