@@ -7,6 +7,7 @@ import threading
 import hashlib
 import sha3
 import random
+from threading import Thread
 from bitstring import BitArray
 from secp256k1 import PrivateKey, PublicKey
 from ipaddress import ip_address
@@ -129,7 +130,20 @@ class PingServer(object):
 				find_neighbour = NeighbourNode(generatedID)
 				message = self.wrap_packet(find_neighbour)
 				logging.info("sending find_node")
-				#sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))	
+				sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))
+
+
+			def decode_worker(q, data):
+				nodes = rlp.decode(data[98:])[0] #[0] nodes [1] expiration
+				for node in nodes:
+					ip = ip_address(node[0])
+					if len(node[1]) == 2:	
+						udp_port = struct.unpack(">H", node[1])
+					if len(node[2]) == 2:
+						tcp_port = struct.unpack(">H", node[2])
+					nodeID = node[3]
+					logging.info("Neighbour: " + str(ip) + ", " + str(udp_port[0]) + ", " + str(tcp_port[0]))
+					q.put(Endpoint(str(ip), udp_port[0], tcp_port[0], nodeID))
 
 			while True:
 				ping = PingNode(self.endpoint, self.their_endpoint)
@@ -158,18 +172,9 @@ class PingServer(object):
 
 							if data[97] == 4:
 								#get up to 16 neighbours and add them to the q (12 neighbours per packet)
-								nodes = rlp.decode(data[98:])[0] #[0] nodes [1] expiration
-								for node in nodes:
-									ip = ip_address(node[0])
-									if len(node[1]) == 2:	
-										udp_port = struct.unpack(">H", node[1])
-									if len(node[2]) == 2:
-										tcp_port = struct.unpack(">H", node[2])
-									nodeID = node[3]
-									logging.info("Neighbour: " + str(ip) + ", " + str(udp_port[0]) + ", " + str(tcp_port[0]))
-									q.put(Endpoint(str(ip), udp_port[0], tcp_port[0], nodeID))
-									counter += 1
-								logging.info("received neighbours from " + addr[0])	
+								worker = Thread(target = decode_worker, args = (q, data))
+								worker.start()
+								logging.info("received neighbours from " + addr[0])
 						#timeout because we received all neighbours available (less than 16)
 						except socket.timeout:
 							break
