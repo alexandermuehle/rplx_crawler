@@ -115,19 +115,26 @@ class PingServer(object):
 				while match is False:
 					generatedID = bytes(random.randint(0,255) for _ in range(64))
 					genHashed = keccak256(generatedID)
-					#get the bytes in which the relevant bits are and iterate over them
-					for x in range(int(bucket/8)+1):
-						#make mask according to position in byte array (if last relevant byte get specific bit mask)
-						if x == int(bucket/8):
-							mask = pow(2, bucket%8)-1
-						else:
-							mask = 255
-						#actual comparing
-						if ~(genHashed[x] ^ hashedID[x]) & mask == mask:
+					if bucket == 0:
+						if genHashed[x] ^ hashedID[x] == 255:
 							match = True
 						else:
 							match = False
 							break
+					else:
+						#get the bytes in which the relevant bits are and iterate over them
+						for x in range(int(bucket/8)+1):
+							#make mask according to position in byte array (if last relevant byte get specific bit mask)
+							if x == int(bucket/8):
+								mask = pow(2, bucket%8)-1
+							else:
+								mask = 255
+							#actual comparing
+							if ~(genHashed[x] ^ hashedID[x]) & mask == mask:
+								match = True
+							else:
+								match = False
+								break
 
 				#logging.info(generatedID)
 				#send request
@@ -201,7 +208,7 @@ class PingServer(object):
 					if serializeOut[-2] == ',':
 						serializeOut = serializeOut[:-2]
 					serializeOut += "]\""
-					request_neighbour(bucket+1)
+					request_neighbour(bucket)
 				serializeOut += ", "
 				logging.debug(serializeOut)
 				out.put(serializeOut)
