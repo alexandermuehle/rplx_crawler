@@ -164,52 +164,58 @@ class PingServer(object):
 					workerOut.put(neighbour)
 
 			while True:
+				#start ping pong
 				ping = PingNode(self.endpoint, self.their_endpoint)
 				message = self.wrap_packet(ping)
 				logging.info("sending ping to " + self.their_endpoint.address.exploded)
 				sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))
 				serializeOut = self.their_endpoint.serialize()
-				#count how many nodes have been received
+				greeted = False
+				while not greeted:
+					try:
+						data, addr = sock.recvfrom(1280)
+						if data[97] == 1:
+							logging.info("received ping from " + addr[0])	
+							pinger = Endpoint(addr[0], addr[1], addr[1], b'')
+							pong = PongNode(pinger, data[:32])
+							message = self.wrap_packet(pong)
+							logging.info("sending pong to " + str(pinger.address))
+							sock.sendto(message, (pinger.address.exploded, pinger.udpPort))	
+							greeted = True
+						if data[97] == 2:
+							logging.info("received pong from " + addr[0])
+					except socket.timeout:
+						serializeOut += ", no greeting"
+						break
 				#discover top 13 buckets of a neigbour (finding collisions for all would be hard)
 				#propability that a node will map to 13th bucket = 1/16384
-				for bucket in range(13):
-					#discover a bucket
-					counter = 0
-					workerOut = queue.Queue()
-					workers = []
-					while counter < 2:
-						try:
-							data, addr = sock.recvfrom(1280)
-							if data[97] == 1:
-								logging.info("received ping from " + addr[0])	
-								pinger = Endpoint(addr[0], addr[1], addr[1], b'')
-								pong = PongNode(pinger, data[:32])
-								message = self.wrap_packet(pong)
-								logging.info("sending pong to " + str(pinger.address))
-								sock.sendto(message, (pinger.address.exploded, pinger.udpPort))	
-
-							if data[97] == 2:
-								logging.debug("received pong from " + addr[0])
-
-							if data[97] == 4:
-								#get up to 16 neighbours and add them to the q (12 neighbours per packet)
-								workers.append(Thread(target = decode_worker, args = (q, data, workerOut)))
-								workers[counter].start()
-								logging.debug("received neighbours from " + addr[0])
-								counter += 1
-						#timeout because we received all neighbours available (less than 16)
-						except socket.timeout:
-							break
-					for worker in workers:
-						worker.join()
-					serializeOut += ", \"["
-					for item in list(workerOut.queue):
-						serializeOut += "[" + item.serialize() + "], "
-					if serializeOut[-2] == ',':
-						serializeOut = serializeOut[:-2]
-					serializeOut += "]\""
-					request_neighbour(bucket)
-				serializeOut += ", "
+				if greeted:
+					for bucket in range(13):
+						#discover a bucket
+						request_neighbour(bucket)
+						counter = 0
+						workerOut = queue.Queue()
+						workers = []
+						while counter < 2:
+							try:
+								data, addr = sock.recvfrom(1280)
+								if data[97] == 4:
+									#get up to 16 neighbours and add them to the q (12 neighbours per packet)
+									workers.append(Thread(target = decode_worker, args = (q, data, workerOut)))
+									workers[counter].start()
+									logging.debug("received neighbours from " + addr[0])
+									counter += 1
+							#timeout because we received all neighbours available (less than 16) or didnt receive ping 
+							except socket.timeout:
+								break
+						for worker in workers:
+							worker.join()
+						serializeOut += ", \"["
+						for item in list(workerOut.queue):
+							serializeOut += "[" + item.serialize() + "], "
+						if serializeOut[-2] == ',':
+							serializeOut = serializeOut[:-2]
+						serializeOut += "]\""
 				logging.debug(serializeOut)
 				out.put(serializeOut)
 				self.their_endpoint = q.get()
