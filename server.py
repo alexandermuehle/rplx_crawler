@@ -98,7 +98,7 @@ class PingServer(object):
 		#hash + signature + packet_type + packet_data
 		return payload_hash + payload
 	
-	def discover(self, q, out, count):
+	def discover(self, q, qset, out, count):
 		sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		sock.bind(('0.0.0.0', self.endpoint.udpPort+count))
 		sock.settimeout(2)
@@ -146,17 +146,20 @@ class PingServer(object):
 					if len(node[2]) == 2:
 						tcp_port = struct.unpack(">H", node[2])
 					else:
-						tcp_port = (">I", 0)
+						tcp_port = (0, ">I")
 					nodeID = node[3]
 					neighbour = Endpoint(str(ip), udp_port[0], tcp_port[0], nodeID)
 					logging.debug("Neighbour: " + neighbour.serialize())
-					q.put(neighbour)
+					if neighbour not in list(qset.queue):
+						q.put(neighbour)
+						qset.put(neighbour)
+						
 					workerOut.put(neighbour)
 
 			while True:
 				ping = PingNode(self.endpoint, self.their_endpoint)
 				message = self.wrap_packet(ping)
-				logging.info("sending ping")
+				logging.info("sending ping to " + self.their_endpoint.address.exploded)
 				sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))
 				serializeOut = self.their_endpoint.serialize()
 				#count how many nodes have been received
@@ -199,7 +202,8 @@ class PingServer(object):
 						serializeOut = serializeOut[:-2]
 					serializeOut += "]\""
 					request_neighbour(bucket+1)
-				logging.info(serializeOut)
+				serializeOut += ", "
+				logging.debug(serializeOut)
 				out.put(serializeOut)
 				self.their_endpoint = q.get()
 
