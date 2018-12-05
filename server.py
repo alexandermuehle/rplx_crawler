@@ -116,7 +116,7 @@ class PingServer(object):
 					generatedID = bytes(random.randint(0,255) for _ in range(64))
 					genHashed = keccak256(generatedID)
 					if bucket == 0:
-						if genHashed[x] ^ hashedID[x] == 255:
+						if genHashed[0] ^ hashedID[0] == 255:
 							match = True
 						else:
 							match = False
