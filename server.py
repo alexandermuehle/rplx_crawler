@@ -16,11 +16,13 @@ from ipaddress import ip_address
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+#keccak hashing
 def keccak256(s):
 	k = sha3.keccak_256()
 	k.update(s)
 	return k.digest()
 
+#endpoint object
 class Endpoint(object):
 	def __init__(self, address, udpPort, tcpPort, nodeID):
 		self.address = ip_address(address)
@@ -110,17 +112,15 @@ class PingServer(object):
 				#generate nodeID to discover specified bucket
 				hashedID = keccak256(self.their_endpoint.nodeID)
 				match = False
-				mask = 255
-
+				mask = 1
 				while match is False:
 					generatedID = bytes(random.randint(0,255) for _ in range(64))
 					genHashed = keccak256(generatedID)
 					if bucket == 0:
-						if genHashed[0] ^ hashedID[0] == 255:
+						if (genHashed[0] ^ hashedID[0]) & mask == mask:
 							match = True
 						else:
 							match = False
-							break
 					else:
 						#get the bytes in which the relevant bits are and iterate over them
 						for x in range(int(bucket/8)+1):
@@ -136,7 +136,6 @@ class PingServer(object):
 								match = False
 								break
 
-				#logging.info(generatedID)
 				#send request
 				find_neighbour = NeighbourNode(generatedID)
 				message = self.wrap_packet(find_neighbour)
@@ -221,4 +220,3 @@ class PingServer(object):
 				self.their_endpoint = q.get()
 
 		return threading.Thread(target = conversation)
-
