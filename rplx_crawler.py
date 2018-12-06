@@ -16,7 +16,9 @@ with open("priv_key", 'w') as f:
 #init queue and fill it with bootstraps
 q = queue.Queue()
 qset = queue.Queue()
-q.put(Endpoint(u'210.183.44.34', 30303, 30303, bytes.fromhex("288b97262895b1c7ec61cf314c2e2004407d0a5dc77566877aad1f2a36659c8b698f4b56fd06c4a0c0bf007b4cfb3e7122d907da3b005fa90e724441902eb19e")))
+q.put(Endpoint(u'52.16.188.185', 30303, 30303, bytes.fromhex("a979fb575495b8d6db44f750317d0f4622bf4c2aa3365d6af7c284339968eef29b69ad0dce72a4d8db5ebb4968de0e3bec910127f134779fbcb0cb6d3331163c"))) #geth
+q.put(Endpoint(u'174.112.32.157', 30303, 30303, bytes.fromhex("e809c4a2fec7daed400e5e28564e23693b23b2cc5a019b612505631bbe7b9ccf709c1796d2a3d29ef2b045f210caf51e3c4f5b6d3587d43ad5d6397526fa6179"))) #parity
+q.put(Endpoint(u'144.76.62.101', 30303, 30303, bytes.fromhex("2676755dd8477ad3beea32b4e5a144fa10444b70dfa3e05effb0fdfa75683ebd4f75709e1f8126cb5317c5a35cae823d503744e790a3a038ae5dd60f51ee9101"))) #pyethapp
 
 out = queue.Queue()
 
