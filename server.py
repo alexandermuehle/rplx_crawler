@@ -103,12 +103,12 @@ class PingServer(object):
 	def discover(self, q, qset, out, count):
 		sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		sock.bind(('0.0.0.0', self.endpoint.udpPort+count))
-		sock.settimeout(2)
+		sock.settimeout(5)
 		self.their_endpoint = q.get()
 
 		def conversation():
 
-			def request_neighbour(bucket):
+			def request_neighbour_lsb(bucket):
 				#generate nodeID to discover specified bucket
 				hashedID = keccak256(self.their_endpoint.nodeID)
 				match = False
@@ -131,6 +131,41 @@ class PingServer(object):
 								mask = 255
 							#actual comparing
 							if ~(genHashed[x] ^ hashedID[x]) & mask == mask:
+								match = True
+							else:
+								match = False
+								break
+
+				#send request
+				find_neighbour = NeighbourNode(generatedID)
+				message = self.wrap_packet(find_neighbour)
+				logging.debug("sending find_node")
+				sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))
+
+			def request_neighbour_msb(bucket):
+				#generate nodeID to discover specified bucket
+				hashedID = keccak256(self.their_endpoint.nodeID)
+				match = False
+				mask = 1 << 7
+				while match is False:
+					generatedID = bytes(random.randint(0,255) for _ in range(64))
+					genHashed = keccak256(generatedID)
+					if bucket == 0:
+						if (genHashed[31] ^ hashedID[31]) & mask == mask:
+							match = True
+						else:
+							match = False
+					else:
+						#get the bytes in which the relevant bits are and iterate over them
+						for x in range(int(bucket/8)+1):
+							#make mask according to position in byte array (if last relevant byte get specific bit mask)
+							if x == int(bucket/8):
+								mask = pow(2, bucket%8)-1
+								mask = mask << (8-bucket%8)
+							else:
+								mask = 255
+							#actual comparing
+							if ~(genHashed[31-x] ^ hashedID[31-x]) & mask == mask:
 								match = True
 							else:
 								match = False
@@ -186,12 +221,11 @@ class PingServer(object):
 					except socket.timeout:
 						serializeOut += ", no greeting"
 						break
-				#discover top 13 buckets of a neigbour (finding collisions for all would be hard)
-				#propability that a node will map to 13th bucket = 1/16384
+				#discover top 14 buckets of a neigbour (finding targets for all buckets would be hard/impossible)
 				if greeted:
-					for bucket in range(13):
+					for bucket in range(14):
 						#discover a bucket
-						request_neighbour(bucket)
+						request_neighbour_msb(bucket)
 						counter = 0
 						workerOut = queue.Queue()
 						workers = []
