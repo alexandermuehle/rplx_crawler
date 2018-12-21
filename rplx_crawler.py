@@ -2,7 +2,7 @@ import logging
 import queue
 import sys
 import threading
-from server import Endpoint, PingNode, PingServer
+from server import Endpoint, PingMsg, CrawlServer
 from secp256k1 import PrivateKey
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ out = queue.Queue()
 threads = []
 running = threading.Event()
 running.set()
-server = PingServer(Endpoint(u'127.0.0.1', 30303, 30303, k.serialize()))
+server = CrawlServer(Endpoint(u'127.0.0.1', 30303, 30303, k.serialize()))
 for x in range(threadcount):
 	t = threading.Thread(target = server.discover, args = (q, qset, out, x, running))
 	t.start()

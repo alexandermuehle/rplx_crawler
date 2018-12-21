@@ -40,7 +40,7 @@ class Endpoint(object):
 		return self.nodeID.hex() + ", " + str(self.address.exploded) + ", " + str(self.udpPort) + ", " + str(self.tcpPort)
 
 #ping message
-class PingNode(object):
+class PingMsg(object):
 	packet_type = b'\x01';
 	version = b'\x04';	
 	def __init__(self, endpoint_from, endpoint_to):
@@ -54,7 +54,7 @@ class PingNode(object):
 			struct.pack(">I", int(time.time() + 60))]
 
 #pong message
-class PongNode(object):
+class PongMsg(object):
 	packet_type = b'\x02';
 	version = b'\x04';	
 	def __init__(self, endpoint_to, ping_hash):
@@ -67,7 +67,7 @@ class PongNode(object):
 			struct.pack(">I", int(time.time() + 60))]
 
 #neighbour message
-class NeighbourNode(object):
+class NeighbourMsg(object):
 	packet_type = b'\x03'
 	version = b'\x04'
 	def __init__(self, pubkey):
@@ -78,7 +78,7 @@ class NeighbourNode(object):
 			struct.pack(">I", int(time.time() + 60))]
 
 
-class PingServer(object):
+class CrawlServer(object):
 	def __init__(self, my_endpoint):
 		self.endpoint = my_endpoint
 		with open('priv_key', 'r') as priv_key_file:
@@ -137,7 +137,7 @@ class PingServer(object):
 							break
 
 			#send request
-			find_neighbour = NeighbourNode(generatedID)
+			find_neighbour = NeighbourMsg(generatedID)
 			message = self.wrap_packet(find_neighbour)
 			logging.debug("sending find_node")
 			sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))
@@ -172,7 +172,7 @@ class PingServer(object):
 							break
 
 			#send request
-			find_neighbour = NeighbourNode(generatedID)
+			find_neighbour = NeighbourMsg(generatedID)
 			message = self.wrap_packet(find_neighbour)
 			logging.debug("sending find_node")
 			sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))
@@ -200,7 +200,7 @@ class PingServer(object):
 		while running.is_set():
 			#start ping pong
 			self.their_endpoint = q.get()
-			ping = PingNode(self.endpoint, self.their_endpoint)
+			ping = PingMsg(self.endpoint, self.their_endpoint)
 			message = self.wrap_packet(ping)
 			logging.info("sending ping to " + self.their_endpoint.address.exploded)
 			sock.sendto(message, (self.their_endpoint.address.exploded, self.their_endpoint.udpPort))
@@ -212,7 +212,7 @@ class PingServer(object):
 					if data[97] == 1:
 						logging.info("received ping from " + addr[0])	
 						pinger = Endpoint(addr[0], addr[1], addr[1], b'')
-						pong = PongNode(pinger, data[:32])
+						pong = PongMsg(pinger, data[:32])
 						message = self.wrap_packet(pong)
 						logging.info("sending pong to " + str(pinger.address))
 						sock.sendto(message, (pinger.address.exploded, pinger.udpPort))	
